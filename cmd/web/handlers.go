@@ -4,67 +4,79 @@ import (
 	"errors"
 	"fmt"
 	"github.com/M0hammadUsman/snippetbox/internal/models"
+	"github.com/M0hammadUsman/snippetbox/internal/validator"
 	"log/slog"
 	"net/http"
 	"strconv"
 )
 
-func (app *application) home(w http.ResponseWriter, _ *http.Request) {
+type snippetCreateForm struct {
+	Title               string `form:"title"`
+	Content             string `form:"content"`
+	Expires             int    `form:"expires"`
+	validator.Validator `form:"-"`
+}
 
+func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	snippets, err := app.snippets.Latest()
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	for _, snippet := range snippets {
-		fmt.Fprintf(w, "%+v\n", snippet)
-	}
-
-	/*tf := []string{
-		"./ui/html/base.tmpl.html",
-		"./ui/html/pages/home.tmpl.html",
-		"./ui/html/partials/nav.tmpl.html",
-	}
-	ts, err := template.ParseFiles(tf...)
-	if err != nil {
-		slog.Error(http.StatusText(http.StatusInternalServerError), "err", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
-	if err = ts.ExecuteTemplate(w, "base", nil); err != nil {
-		slog.Error(http.StatusText(http.StatusInternalServerError), "err", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-	}*/
+	data := app.newTemplateData(r)
+	data.Snippets = snippets
+	app.render(w, http.StatusOK, "home.tmpl.html", data)
 }
 
 func (app *application) snippetView(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil || id < 1 {
 		http.NotFound(w, r)
 		return
 	}
-	res, err := app.snippets.Get(id)
+	snippet, err := app.snippets.Get(id)
+	data := app.newTemplateData(r)
+	data.Snippet = snippet
 	if errors.Is(err, models.ErrorNoRows) {
 		http.NotFound(w, r)
-		return
-	}
-	_, err = fmt.Fprintf(w, "%+v", res)
-	if err != nil {
+	} else if err != nil {
 		slog.Error(err.Error())
+	} else {
+		app.render(w, http.StatusOK, "view.tmpl.html", data)
 	}
 }
 
-func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
-	// Create some variables holding dummy data. We'll remove these later on
-	// during the build.
-	title := "O snail"
-	content := "O snail\nClimb Mount Fuji,\nBut slowly, slowly!\n\n– Kobayashi Issa"
-	expires := 7
-	err := app.snippets.Insert(title, content, expires)
+func (app *application) snippetCreatePost(w http.ResponseWriter, r *http.Request) {
+	var form snippetCreateForm
+	if err := app.decodePostForm(r, &form); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		slog.Error(err.Error())
+		return
+	}
+	form.CheckField(validator.NotBlank(form.Title), "title", "This field cannot be blank")
+	form.CheckField(validator.MaxChars(form.Title, 100), "title", "This field cannot be more than 100 characters long")
+	form.CheckField(validator.NotBlank(form.Content), "content", "This field cannot be blank")
+	form.CheckField(validator.PermittedInt(form.Expires, 1, 7, 365), "expires", "This field must equal 1, 7 or 365")
+	if !form.Valid() {
+		data := app.newTemplateData(r)
+		data.Form = form
+		app.render(w, http.StatusUnprocessableEntity, "create.tmpl.html", data)
+		return
+	}
+	err := app.snippets.Insert(form.Title, form.Content, form.Expires)
 	if err != nil {
 		slog.Error(err.Error())
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/snippets/view?id=1"), http.StatusSeeOther)
+	// Use the Put() method to add a string value ("Snippet successfully
+	// created!") and the corresponding key ("flash") to the session data.
+	app.sessionManager.Put(r.Context(), "flash", "Snippet Successfully Created!")
+	http.Redirect(w, r, fmt.Sprintf("/"), http.StatusSeeOther)
+}
+
+func (app *application) snippetCreate(w http.ResponseWriter, r *http.Request) {
+	data := app.newTemplateData(r)
+	data.Form = snippetCreateForm{Expires: 365}
+	app.render(w, http.StatusOK, "create.tmpl.html", data)
 }

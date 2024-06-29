@@ -3,8 +3,11 @@ module github.com/M0hammadUsman/snippetbox
 go 1.22.4
 
 require (
-	github.com/go-http-utils/headers v0.0.0-20181008091004-fed159eddc2a
+	github.com/alexedwards/scs/pgxstore v0.0.0-20240316134038-7e11d57e8885
+	github.com/alexedwards/scs/v2 v2.8.0
+	github.com/go-playground/form/v4 v4.2.1
 	github.com/jackc/pgx/v5 v5.6.0
+	github.com/justinas/alice v1.2.0
 	github.com/lmittmann/tint v1.0.4
 )
 

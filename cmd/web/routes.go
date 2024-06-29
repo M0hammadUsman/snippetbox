@@ -2,20 +2,23 @@ package main
 
 import (
 	"fmt"
+	"github.com/justinas/alice"
 	"net/http"
 )
 
-func (app *application) routes() *http.ServeMux {
-
+func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
 
 	fs := http.FileServer(http.Dir("./ui/static"))
 	mux.Handle(fmt.Sprint(http.MethodGet, " /static/"), http.StripPrefix("/static/", fs))
 
-	mux.HandleFunc(fmt.Sprint(http.MethodGet, " /{$}"), app.home)
-	mux.HandleFunc(fmt.Sprint(http.MethodGet, " /snippets/view"), app.snippetView)
-	mux.HandleFunc(fmt.Sprint(http.MethodPost, " /snippets/create"), app.snippetCreate)
+	dynamic := alice.New(app.sessionManager.LoadAndSave)
 
-	return mux
+	mux.Handle(fmt.Sprint(http.MethodGet, " /{$}"), dynamic.ThenFunc(app.home))
+	mux.Handle(fmt.Sprint(http.MethodGet, " /snippets/view/{id}"), dynamic.ThenFunc(app.snippetView))
+	mux.Handle(fmt.Sprint(http.MethodGet, " /snippets/create"), dynamic.ThenFunc(app.snippetCreate))
+	mux.Handle(fmt.Sprint(http.MethodPost, " /snippets/create"), dynamic.ThenFunc(app.snippetCreatePost))
 
+	standard := alice.New(recoverPanic, app.logRequest, secureHeaders)
+	return standard.Then(mux)
 }
