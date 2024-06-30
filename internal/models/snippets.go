@@ -46,7 +46,7 @@ func (m *SnippetModel) Get(id int) (*Snippet, error) {
 	r := m.DBPool.QueryRow(context.Background(), stmt, id).Scan(&s.ID, &s.Title, &s.Content, &s.Created, &s.Expires)
 	err := r
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrorNoRows
+		return nil, ErrNoRows
 	}
 	return s, nil
 }

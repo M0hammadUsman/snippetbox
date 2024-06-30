@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"github.com/M0hammadUsman/snippetbox/internal/models"
 	"github.com/alexedwards/scs/pgxstore"
@@ -21,6 +22,7 @@ import (
 // make the SnippetModel object available to our handlers.
 type application struct {
 	snippets       *models.SnippetModel
+	users          *models.UserModel
 	templateCache  map[string]*template.Template
 	formDecoder    *form.Decoder
 	sessionManager *scs.SessionManager
@@ -45,6 +47,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Unable to create connection pool\n", err.Error())
 	}
+	defer dbPool.Close()
 	tmplCache, err := newTemplateCache()
 	if err != nil {
 		log.Fatal("Unable to cache the templates\n", err.Error())
@@ -56,14 +59,25 @@ func main() {
 	// Initialize a models.SnippetModel instance and add it to the application dependencies.
 	app := &application{
 		snippets:       &models.SnippetModel{DBPool: dbPool},
+		users:          &models.UserModel{DBPool: dbPool},
 		templateCache:  tmplCache,
 		formDecoder:    form.NewDecoder(),
 		sessionManager: sessionManager,
 	}
-	defer dbPool.Close()
+	// TLS config to restrict the curves
+	tlsConfig := &tls.Config{CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256}}
+	srv := &http.Server{
+		Addr:      cfg.addr,
+		Handler:   app.routes(),
+		TLSConfig: tlsConfig,
+		// Add Idle, Read and Write timeouts to the server.
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
 	slog.Info("Starting server on", "address", cfg.addr)
 	slog.Info("Static dir path set to", "path", cfg.staticDir)
-	slog.Error(http.ListenAndServe(cfg.addr, app.routes()).Error())
+	slog.Error(srv.ListenAndServeTLS("./tls/cert.pem", "./tls/key.pem").Error())
 }
 
 func openDB(dsn string) (*pgxpool.Pool, error) {
