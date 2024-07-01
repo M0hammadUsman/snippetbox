@@ -41,7 +41,7 @@ func main() {
 	flag.StringVar(&cfg.dsn, "dsn", "postgres://web:uusmann3344@localhost:5432/snippetbox?sslmode=disable", "Data Source Name (DSN)")
 	flag.Parse()
 	// Loggers
-	slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, nil)))
+	slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, &tint.Options{AddSource: true})))
 	// Database
 	dbPool, err := openDB(cfg.dsn)
 	if err != nil {
@@ -71,9 +71,9 @@ func main() {
 		Handler:   app.routes(),
 		TLSConfig: tlsConfig,
 		// Add Idle, Read and Write timeouts to the server.
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  100 * time.Minute,
+		ReadTimeout:  1000 * time.Second,
+		WriteTimeout: 1000 * time.Second,
 	}
 	slog.Info("Starting server on", "address", cfg.addr)
 	slog.Info("Static dir path set to", "path", cfg.staticDir)

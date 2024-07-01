@@ -2,8 +2,8 @@ package models
 
 import (
 	"context"
-	"database/sql"
 	"errors"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
@@ -48,7 +48,7 @@ func (m *UserModel) Authenticate(email, password string) (int, error) {
 	stmt := `SELECT id, password FROM users WHERE email = $1`
 	err := m.DBPool.QueryRow(context.Background(), stmt, email).Scan(&id, &hashedPassword)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, ErrInvalidCredentials
 		} else {
 			return 0, err
@@ -66,5 +66,8 @@ func (m *UserModel) Authenticate(email, password string) (int, error) {
 }
 
 func (m *UserModel) Exists(id int) (bool, error) {
-	return false, nil
+	var exists bool
+	stmt := `SELECT EXISTS(SELECT TRUE FROM users WHERE id = $1)`
+	err := m.DBPool.QueryRow(context.Background(), stmt, id).Scan(&exists)
+	return exists, err
 }
